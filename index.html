@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Overlay</title>
+
+<style>
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    background: rgb(255, 255, 255);
+    overflow: hidden;
+  }
+
+  #scene {
+    width: 100%;
+    height: 100%;
+    border: none;
+    opacity: 1;
+    transition: opacity 0.4s ease;
+    pointer-events: none; /* IMPORTANT */
+  }
+
+  #hud {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    font-family: monospace;
+    font-size: 14px;
+    color: #aaa;
+    opacity: 0.6;
+    user-select: none;
+  }
+</style>
+</head>
+
+<body tabindex="0"> <!-- IMPORTANT -->
+
+<iframe
+  id="scene"
+  src="./page1.html"
+  tabindex="-1">
+</iframe>
+
+<script src="./nav.js"></script>
+
+<script>
+  // Force focus so keyboard always works
+  window.focus();
+  document.body.focus();
+</script>
+
+</body>
+</html>
