@@ -52,30 +52,8 @@
     <div class="time" id="clock"></div>
     <div class="date" id="date"></div>
 </div>
-
-<script>
-function updateClock() {
-    const now = new Date();
-    let h = now.getHours();
-    const m = String(now.getMinutes()).padStart(2, '0');
-    const s = String(now.getSeconds()).padStart(2, '0');
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    h = h % 12;
-    h = h ? h : 12; // convert 0 to 12
-
-    document.getElementById("clock").innerHTML = 
-        `${h}:${m}:${s}<span class="ampm">${ampm}</span>`;
-
-    document.getElementById("date").textContent = now.toLocaleDateString(undefined, {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-    });
-}
-setInterval(updateClock, 1000);
-updateClock();
-setInterval(updateClock, 1000);
-updateClock();
-</script>
-
+<h1>test</h1>
+<script src="./numpad-nav.js"></script>
 
 </body>
 </html>
