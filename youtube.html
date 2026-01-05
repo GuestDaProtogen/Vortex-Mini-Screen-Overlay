@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>YouTube TV</title>
+
+<style>
+body {
+  margin: 0;
+  background: black;
+  color: white;
+  font-family: system-ui, sans-serif;
+  overflow: hidden;
+}
+
+/* ===== HEADER ===== */
+#header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  z-index: 10;
+}
+
+#logo {
+  font-size: 22px;
+  font-weight: bold;
+  color: #ff0000;
+}
+
+#searchBtn {
+  padding: 8px 18px;
+  border-radius: 20px;
+  background: #222;
+}
+
+#searchBtn.focus {
+  outline: 3px solid #1aa3ff;
+}
+
+/* ===== SEARCH PREVIEW ===== */
+#searchPreview {
+  padding: 0 24px 12px;
+  font-size: 18px;
+  opacity: 0.9;
+  min-height: 24px;
+}
+
+/* ===== GRID ===== */
+#browser {
+  padding: 24px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 18px;
+}
+
+.item {
+  background: #1c1c1c;
+  border-radius: 10px;
+  padding: 8px;
+  transition: transform 0.15s ease;
+}
+
+.item.active {
+  outline: 4px solid #1aa3ff;
+  transform: scale(1.05);
+}
+
+.item img {
+  width: 100%;
+  border-radius: 8px;
+}
+
+/* ===== PLAYER ===== */
+#player {
+  position: fixed;
+  inset: 0;
+  display: none;
+  background: black;
+  z-index: 20;
+}
+
+/* ===== CONTROLS ===== */
+#controls {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px 24px;
+  background: linear-gradient(to top, rgba(0,0,0,.85), transparent);
+  display: none;
+  z-index: 25;
+}
+
+.bar {
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+#progress {
+  height: 100%;
+  width: 0%;
+  background: #1aa3ff;
+}
+
+.controlsRow {
+  display: flex;
+  gap: 24px;
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+/* ===== KEYBOARD ===== */
+#keyboard {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 60%;
+  background: rgba(0,0,0,0.95);
+  display: none;
+  z-index: 15;
+}
+
+.keys {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+}
+
+
+.key {
+  padding: 14px;
+  background: #222;
+  text-align: center;
+  border-radius: 6px;
+}
+
+.key.space {
+  grid-column: span 3;
+}
+
+
+.key.active {
+  outline: 3px solid #1aa3ff;
+}
+</style>
+</head>
+
+<body>
+
+<!-- ===== HEADER ===== -->
+<div id="header">
+  <div id="logo">YouTube</div>
+  <div id="searchBtn">🔍 Search</div>
+</div>
+
+<div id="searchPreview"></div>
+
+<!-- ===== BROWSER ===== -->
+<div id="browser">
+  <div id="grid" class="grid"></div>
+</div>
+
+<!-- ===== PLAYER ===== -->
+<div id="player"></div>
+
+<!-- ===== CONTROLS ===== -->
+<div id="controls">
+  <div class="bar"><div id="progress"></div></div>
+  <div class="controlsRow">
+    <span id="time">0:00 / 0:00</span>
+    <span id="volume">🔊 50%</span>
+  </div>
+</div>
+
+<!-- ===== KEYBOARD ===== -->
+<div id="keyboard">
+  <div class="keys" id="keys"></div>
+</div>
+
+<script src="./config.js"></script>
+<script src="https://www.youtube.com/iframe_api"></script>
+
+<script>
+/* ================= STATE ================= */
+let videos = [];
+let index = 0;
+let focusZone = "grid"; // grid | search | keyboard | play
+let mode = "browse";
+let searchQuery = "";
+let keyRow = 0;
+let keyCol = 0;
+let volume = 50;
+let firstInteraction = true;
+let controlsTimer;
+
+const COLS = 5;
+const keyboardRows = [
+  ["0","1","2","3","4","5","6","7","8","9"],
+  ["Q","W","E","R","T","Y","U","I","O","P"],
+  ["A","S","D","F","G","H","J","K","L"],
+  ["Z","X","C","V","B","N","M",".",",","?"],
+  ["⌫","␣","⏎"]
+];
+
+
+
+
+/* ================= PLAYER ================= */
+let player;
+function onYouTubeIframeAPIReady() {
+  player = new YT.Player("player", {
+    width: "100%",
+    height: "100%",
+    playerVars: {
+      autoplay: 1,
+      controls: 0,
+      playsinline: 1,
+      rel: 0,
+      modestbranding: 1,
+      origin: window.location.origin
+    },
+    events: {
+      onReady: () => {
+        // player is now valid
+      }
+    }
+  });
+}
+
+function safePlay(videoId) {
+  if (!player || typeof player.loadVideoById !== "function") {
+    console.warn("Player not ready yet");
+    return;
+  }
+
+  player.loadVideoById(videoId);
+}
+
+
+/* ================= FETCH ================= */
+async function loadTrending() {
+  const r = await fetch(
+    `https://www.googleapis.com/youtube/v3/videos?part=snippet&chart=mostPopular&maxResults=20&key=${CONFIG.YT_API_KEY}`
+  );
+  const j = await r.json();
+  videos = j.items;
+  index = 0;
+  renderGrid();
+}
+
+async function search(q) {
+  const r = await fetch(
+    `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=20&q=${encodeURIComponent(q)}&key=${CONFIG.YT_API_KEY}`
+  );
+  const j = await r.json();
+  videos = j.items;
+  index = 0;
+  renderGrid();
+}
+
+/* ================= RENDER ================= */
+function renderGrid() {
+  const g = document.getElementById("grid");
+  g.innerHTML = "";
+  videos.forEach((v,i)=>{
+    const d = document.createElement("div");
+    d.className = "item" + (focusZone==="grid" && i===index ? " active":"");
+    d.innerHTML = `<img src="${v.snippet.thumbnails.medium.url}">`;
+    g.appendChild(d);
+  });
+}
+
+function updateSearchPreview() {
+  document.getElementById("searchPreview").textContent =
+    searchQuery ? `Search: ${searchQuery}` : "";
+}
+
+function renderKeyboard() {
+  const k = document.getElementById("keys");
+  k.innerHTML = "";
+
+  keyboardRows.forEach((row, r) => {
+    const rowDiv = document.createElement("div");
+    rowDiv.style.display = "flex";
+    rowDiv.style.justifyContent = "center";
+    rowDiv.style.gap = "10px";
+    rowDiv.style.marginBottom = "10px";
+
+    row.forEach((key, c) => {
+      const d = document.createElement("div");
+      d.className = "key";
+
+      if (r === keyRow && c === keyCol) {
+        d.classList.add("active");
+      }
+
+      if (key === "␣") {
+        d.style.flex = "3";
+        d.textContent = "SPACE";
+      } else if (key === "⌫") {
+        d.style.flex = "1.5";
+        d.textContent = "⌫";
+      } else if (key === "⏎") {
+        d.style.flex = "1.5";
+        d.textContent = "⏎";
+      } else {
+        d.textContent = key;
+      }
+
+      rowDiv.appendChild(d);
+    });
+
+    k.appendChild(rowDiv);
+  });
+}
+
+
+
+/* ================= PLAY ================= */
+function getVideoId(v) {
+  if (typeof v.id === "string") return v.id;
+  if (v.id?.videoId) return v.id.videoId;
+}
+
+function playSelected() {
+  const id = getVideoId(videos[index]);
+  if (!id) return;
+
+  focusZone = "play";
+  mode = "play";
+
+  document.getElementById("browser").style.display = "none";
+  document.getElementById("header").style.display = "none";
+  document.getElementById("searchPreview").style.display = "none";
+  document.getElementById("player").style.display = "block";
+  document.getElementById("controls").style.display = "block";
+
+  // IMPORTANT: wait one frame so iframe is visible
+  requestAnimationFrame(() => {
+    safePlay(id);
+  });
+}
+
+
+/* ================= CONTROLS ================= */
+function showControls() {
+  clearTimeout(controlsTimer);
+  document.getElementById("controls").style.display = "block";
+  controlsTimer = setTimeout(()=>{
+    document.getElementById("controls").style.display = "none";
+  },3000);
+}
+
+setInterval(()=>{
+  if (mode!=="play" || !player?.getDuration) return;
+  const c = player.getCurrentTime();
+  const d = player.getDuration();
+  document.getElementById("progress").style.width = (c/d*100)+"%";
+  document.getElementById("time").textContent = fmt(c)+" / "+fmt(d);
+},500);
+
+function fmt(t){
+  const m=Math.floor(t/60);
+  const s=Math.floor(t%60).toString().padStart(2,"0");
+  return `${m}:${s}`;
+}
+
+/* ================= KEYBOARD ================= */
+function showKeyboard() {
+  focusZone = "keyboard";
+  mode = "search";
+  keyRow = 0;
+  keyCol = 0;
+  document.getElementById("keyboard").style.display = "block";
+  renderKeyboard();
+}
+
+
+function handleKeySelect() {
+  const key = keyboardRows[keyRow][keyCol];
+
+  if (key === "⌫") {
+    searchQuery = searchQuery.slice(0, -1);
+  }
+  else if (key === "⏎") {
+    document.getElementById("keyboard").style.display = "none";
+    search(searchQuery);
+    focusZone = "grid";
+    mode = "browse";
+    return;
+  }
+  else if (key === "␣") {
+    searchQuery += " ";
+  }
+  else {
+    searchQuery += key;
+  }
+
+  updateSearchPreview();
+}
+
+
+
+/* ================= REMOTE ================= */
+window.addEventListener("message", e=>{
+  const c = e.data.cmd;
+
+  /* PLAY MODE */
+  if (mode==="play") {
+    if (c==="select") {
+      if (firstInteraction) {
+        player.unMute();
+        player.setVolume(volume);
+        firstInteraction=false;
+      }
+      player.getPlayerState()===1?player.pauseVideo():player.playVideo();
+      showControls();
+    }
+    if (c==="up") { volume=Math.min(100,volume+5); player.setVolume(volume); }
+    if (c==="down") { volume=Math.max(0,volume-5); player.setVolume(volume); }
+    if (c==="back") {
+      player.stopVideo();
+      mode="browse";
+      focusZone="grid";
+      document.getElementById("player").style.display="none";
+      document.getElementById("controls").style.display="none";
+      document.getElementById("browser").style.display="block";
+      document.getElementById("header").style.display="flex";
+      document.getElementById("searchPreview").style.display="block";
+    }
+    return;
+  }
+
+  /* SEARCH BUTTON */
+  if (focusZone==="search") {
+    if (c==="down") {
+      focusZone="grid";
+      document.getElementById("searchBtn").classList.remove("focus");
+      renderGrid();
+      return;
+    }
+    if (c==="select") {
+      showKeyboard();
+      return;
+    }
+    return;
+  }
+
+  /* KEYBOARD */
+  if (focusZone === "keyboard") {
+
+    if (c === "left") {
+      keyCol = Math.max(0, keyCol - 1);
+    }
+
+    if (c === "right") {
+      keyCol = Math.min(
+        keyboardRows[keyRow].length - 1,
+        keyCol + 1
+      );
+    }
+
+    if (c === "up") {
+      keyRow = Math.max(0, keyRow - 1);
+      keyCol = Math.min(keyCol, keyboardRows[keyRow].length - 1);
+    }
+
+    if (c === "down") {
+      keyRow = Math.min(keyboardRows.length - 1, keyRow + 1);
+      keyCol = Math.min(keyCol, keyboardRows[keyRow].length - 1);
+    }
+
+    if (c === "select") {
+      handleKeySelect();
+    }
+
+    renderKeyboard();
+    return;
+  }
+
+
+  /* GRID */
+  if (focusZone==="grid") {
+    const row = Math.floor(index / COLS);
+
+    if (c==="up" && row===0) {
+      focusZone="search";
+      document.getElementById("searchBtn").classList.add("focus");
+      renderGrid();
+      return;
+    }
+
+    if (c==="up") index=Math.max(0,index-COLS);
+    if (c==="down") index=Math.min(videos.length-1,index+COLS);
+    if (c==="left") index=Math.max(0,index-1);
+    if (c==="right") index=Math.min(videos.length-1,index+1);
+    if (c==="select") playSelected();
+
+    renderGrid();
+  }
+});
+
+/* ================= INIT ================= */
+loadTrending();
+</script>
+</body>
+</html>
